@@ -1,0 +1,403 @@
+// 1. ESTRUCTURA DEL PROYECTO
+// src/main/java/com/festivos/
+// ├── FestivosApplication.java
+// ├── controller/
+// │   └── FestivosController.java
+// ├── service/
+// │   └── FestivosService.java
+// ├── model/
+// │   └── FestivoResponse.java
+// └── config/
+//     └── CorsConfig.java
+
+// ================================
+// 1. CLASE PRINCIPAL DE LA APLICACIÓN
+// ================================
+// Archivo: src/main/java/com/festivos/FestivosApplication.java
+
+package com.festivos;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class FestivosApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(FestivosApplication.class, args);
+    }
+}
+
+// ================================
+// 2. MODELO DE RESPUESTA
+// ================================
+// Archivo: src/main/java/com/festivos/model/FestivoResponse.java
+
+package com.festivos.model;
+
+public class FestivoResponse {
+    private boolean esFestivo;
+    private String mensaje;
+    private String fecha;
+    
+    public FestivoResponse() {}
+    
+    public FestivoResponse(boolean esFestivo, String mensaje, String fecha) {
+        this.esFestivo = esFestivo;
+        this.mensaje = mensaje;
+        this.fecha = fecha;
+    }
+    
+    // Getters y Setters
+    public boolean isEsFestivo() {
+        return esFestivo;
+    }
+    
+    public void setEsFestivo(boolean esFestivo) {
+        this.esFestivo = esFestivo;
+    }
+    
+    public String getMensaje() {
+        return mensaje;
+    }
+    
+    public void setMensaje(String mensaje) {
+        this.mensaje = mensaje;
+    }
+    
+    public String getFecha() {
+        return fecha;
+    }
+    
+    public void setFecha(String fecha) {
+        this.fecha = fecha;
+    }
+}
+
+// ================================
+// 3. SERVICIO DE LÓGICA DE NEGOCIO
+// ================================
+// Archivo: src/main/java/com/festivos/service/FestivosService.java
+
+package com.festivos.service;
+
+import org.springframework.stereotype.Service;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.DayOfWeek;
+import java.time.DateTimeException;
+import java.util.*;
+
+@Service
+public class FestivosService {
+    
+    // Festivos según la tabla proporcionada
+    private static final List<FestivoInfo> FESTIVOS_COLOMBIA = Arrays.asList(
+        // Festivos fijos (Tipo 1)
+        new FestivoInfo(1, 1, "Año nuevo", 1, 0),
+        new FestivoInfo(1, 5, "Día del Trabajo", 1, 0),
+        new FestivoInfo(20, 7, "Independencia Colombia", 1, 0),
+        new FestivoInfo(7, 8, "Batalla de Boyacá", 1, 0),
+        new FestivoInfo(8, 12, "Inmaculada Concepción", 1, 0),
+        new FestivoInfo(25, 12, "Navidad", 1, 0),
+        
+        // Ley de "Puente festivo" - Se trasladan al siguiente lunes (Tipo 2)
+        new FestivoInfo(6, 1, "Santos Reyes", 2, 0),
+        new FestivoInfo(19, 3, "San José", 2, 0),
+        new FestivoInfo(29, 6, "San Pedro y San Pablo", 2, 0),
+        new FestivoInfo(15, 8, "Asunción de la Virgen", 2, 0),
+        new FestivoInfo(12, 10, "Día de la Raza", 2, 0),
+        new FestivoInfo(1, 11, "Todos los santos", 2, 0),
+        new FestivoInfo(11, 11, "Independencia de Cartagena", 2, 0),
+        
+        // Basados en el domingo de pascua (Tipo 3)
+        new FestivoInfo(0, 0, "Jueves Santo", 3, -3),
+        new FestivoInfo(0, 0, "Viernes Santo", 3, -2),
+        new FestivoInfo(0, 0, "Domingo de Pascua", 3, 0),
+        
+        // Basados en el domingo de pascua y Ley de "Puente festivo" (Tipo 4)
+        new FestivoInfo(0, 0, "Ascensión del Señor", 4, 40),
+        new FestivoInfo(0, 0, "Corpus Christi", 4, 61),
+        new FestivoInfo(0, 0, "Sagrado Corazón de Jesús", 4, 68)
+    );
+    
+    // Clase interna para manejar información de festivos
+    private static class FestivoInfo {
+        int dia, mes;
+        String nombre;
+        int tipo; // 1=fijo, 2=lunes siguiente, 3=pascua, 4=pascua+dias
+        int diasPascua;
+        
+        FestivoInfo(int dia, int mes, String nombre, int tipo, int diasPascua) {
+            this.dia = dia;
+            this.mes = mes;
+            this.nombre = nombre;
+            this.tipo = tipo;
+            this.diasPascua = diasPascua;
+        }
+    }
+    
+    public boolean validarFecha(int year, int month, int day) {
+        try {
+            LocalDate.of(year, month, day);
+            return true;
+        } catch (DateTimeException e) {
+            return false;
+        }
+    }
+    
+    public boolean esFecheFestiva(int year, int month, int day) {
+        if (!validarFecha(year, month, day)) {
+            return false;
+        }
+        
+        LocalDate fecha = LocalDate.of(year, month, day);
+        
+        for (FestivoInfo festivo : FESTIVOS_COLOMBIA) {
+            if (esFestivoEnFecha(festivo, fecha)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    private boolean esFestivoEnFecha(FestivoInfo festivo, LocalDate fecha) {
+        switch (festivo.tipo) {
+            case 1: // Festivo de fecha fija - No se puede variar
+                return fecha.getDayOfMonth() == festivo.dia && 
+                       fecha.getMonthValue() == festivo.mes;
+                       
+            case 2: // Ley de "Puente festivo" - Se traslada la fecha al siguiente lunes
+                LocalDate fechaOriginal = LocalDate.of(fecha.getYear(), festivo.mes, festivo.dia);
+                if (fechaOriginal.getDayOfWeek() == DayOfWeek.MONDAY) {
+                    return fecha.equals(fechaOriginal);
+                } else {
+                    // Buscar el siguiente lunes
+                    int diasHastaLunes = 8 - fechaOriginal.getDayOfWeek().getValue();
+                    if (diasHastaLunes == 8) diasHastaLunes = 1; // Si es domingo
+                    LocalDate siguienteLunes = fechaOriginal.plusDays(diasHastaLunes);
+                    return fecha.equals(siguienteLunes);
+                }
+                
+            case 3: // Basado en el domingo de pascua
+                LocalDate pascua = calcularPascua(fecha.getYear());
+                LocalDate fechaFestivo = pascua.plusDays(festivo.diasPascua);
+                return fecha.equals(fechaFestivo);
+                
+            case 4: // Basado en el domingo de pascua y Ley de "Puente festivo"
+                LocalDate pascuaBase = calcularPascua(fecha.getYear());
+                LocalDate fechaBase = pascuaBase.plusDays(festivo.diasPascua);
+                
+                if (fechaBase.getDayOfWeek() == DayOfWeek.MONDAY) {
+                    return fecha.equals(fechaBase);
+                } else {
+                    // La fecha calculada debe ser trasladada al siguiente lunes
+                    int diasHastaLunesP = 8 - fechaBase.getDayOfWeek().getValue();
+                    if (diasHastaLunesP == 8) diasHastaLunesP = 1; // Si es domingo
+                    LocalDate siguienteLunesP = fechaBase.plusDays(diasHastaLunesP);
+                    return fecha.equals(siguienteLunesP);
+                }
+                
+            default:
+                return false;
+        }
+    }
+    
+    private LocalDate calcularDomingoPascua(int year) {
+        // Fórmula oficial para calcular el Domingo de Ramos (Pascua)
+        // días = d + (2b+4c+6d+5) MOD 7
+        
+        int a = year % 19;
+        int b = year % 4;
+        int c = year % 7;
+        int d = (19 * a + 24) % 30;
+        
+        int dias = d + (2 * b + 4 * c + 6 * d + 5) % 7;
+        
+        // La fecha base es el 15 de marzo
+        LocalDate fechaBase = LocalDate.of(year, 3, 15);
+        return fechaBase.plusDays(dias);
+    }
+    
+    private LocalDate calcularPascua(int year) {
+        // El Domingo de Pascua es 7 días después del Domingo de Ramos
+        LocalDate domingoRamos = calcularDomingoPascua(year);
+        return domingoRamos.plusDays(7);
+    }
+    
+    public String obtenerNombreFestivo(LocalDate fecha) {
+        for (FestivoInfo festivo : FESTIVOS_COLOMBIA) {
+            if (esFestivoEnFecha(festivo, fecha)) {
+                return festivo.nombre;
+            }
+        }
+        return "No es festivo";
+    }
+}
+
+// ================================
+// 4. CONTROLADOR REST
+// ================================
+// Archivo: src/main/java/com/festivos/controller/FestivosController.java
+
+package com.festivos.controller;
+
+import com.festivos.model.FestivoResponse;
+import com.festivos.service.FestivosService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+
+@RestController
+@RequestMapping("/festivos")
+@CrossOrigin(origins = "*")
+public class FestivosController {
+    
+    @Autowired
+    private FestivosService festivosService;
+    
+    @GetMapping("/verificar/{year}/{month}/{day}")
+    public ResponseEntity<FestivoResponse> verificarFecha(
+            @PathVariable int year,
+            @PathVariable int month,
+            @PathVariable int day) {
+        
+        // Primero validar si la fecha es válida
+        if (!festivosService.validarFecha(year, month, day)) {
+            FestivoResponse errorResponse = new FestivoResponse(
+                false, 
+                "Fecha no válida", 
+                null
+            );
+            return ResponseEntity.ok(errorResponse);
+        }
+        
+        try {
+            LocalDate fecha = LocalDate.of(year, month, day);
+            boolean esFestivo = festivosService.esFecheFestiva(year, month, day);
+            
+            String mensaje;
+            if (esFestivo) {
+                String nombreFestivo = festivosService.obtenerNombreFestivo(fecha);
+                mensaje = "Es Festivo - " + nombreFestivo;
+            } else {
+                mensaje = "No es Festivo";
+            }
+            
+            FestivoResponse response = new FestivoResponse(
+                esFestivo, 
+                mensaje, 
+                fecha.toString()
+            );
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            FestivoResponse errorResponse = new FestivoResponse(
+                false, 
+                "Error procesando la fecha", 
+                null
+            );
+            return ResponseEntity.ok(errorResponse);
+        }
+    }
+    
+    // Endpoint adicional para verificar fecha actual
+    @GetMapping("/hoy")
+    public ResponseEntity<FestivoResponse> verificarHoy() {
+        LocalDate hoy = LocalDate.now();
+        return verificarFecha(hoy.getYear(), hoy.getMonthValue(), hoy.getDayOfMonth());
+    }
+}
+
+// ================================
+// 5. CONFIGURACIÓN CORS (OPCIONAL)
+// ================================
+// Archivo: src/main/java/com/festivos/config/CorsConfig.java
+
+package com.festivos.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+@Configuration
+public class CorsConfig {
+    
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.addAllowedOrigin("*");
+        configuration.addAllowedMethod("*");
+        configuration.addAllowedHeader("*");
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+}
+
+// ================================
+// 6. ARCHIVO POM.XML (DEPENDENCIAS)
+// ================================
+/*
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.0</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>com.festivos</groupId>
+    <artifactId>festivos-api</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>festivos-api</name>
+    <description>API para verificar fechas festivas</description>
+    
+    <properties>
+        <java.version>11</java.version>
+    </properties>
+    
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+*/
+
+// ================================
+// 7. ARCHIVO APPLICATION.PROPERTIES
+// ================================
+/*
+# Archivo: src/main/resources/application.properties
+server.port=8080
+spring.application.name=festivos-api
+*/
