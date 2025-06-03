@@ -203,8 +203,8 @@ public class FestivosService {
         }
     }
     
-    private LocalDate calcularDomingoPascua(int year) {
-        // Fórmula oficial para calcular el Domingo de Ramos (Pascua)
+    private LocalDate calcularPascua(int year) {
+        // Fórmula oficial para calcular el Domingo de Pascua
         // días = d + (2b+4c+6d+5) MOD 7
         
         int a = year % 19;
@@ -217,12 +217,6 @@ public class FestivosService {
         // La fecha base es el 15 de marzo
         LocalDate fechaBase = LocalDate.of(year, 3, 15);
         return fechaBase.plusDays(dias);
-    }
-    
-    private LocalDate calcularPascua(int year) {
-        // El Domingo de Pascua es 7 días después del Domingo de Ramos
-        LocalDate domingoRamos = calcularDomingoPascua(year);
-        return domingoRamos.plusDays(7);
     }
     
     public String obtenerNombreFestivo(LocalDate fecha) {
